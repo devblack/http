@@ -135,17 +135,17 @@ Most importantly, this project provides a [`Browser`](#browser) object that
 offers several methods that resemble the HTTP protocol methods:
 
 ```php
-$browser->get($url, array $headers = array());
-$browser->head($url, array $headers = array());
-$browser->post($url, array $headers = array(), string|ReadableStreamInterface $body = '');
-$browser->delete($url, array $headers = array(), string|ReadableStreamInterface $body = '');
-$browser->put($url, array $headers = array(), string|ReadableStreamInterface $body = '');
-$browser->patch($url, array $headers = array(), string|ReadableStreamInterface $body = '');
+$browser->get($url, array $options = array());
+$browser->head($url, array $options = array());
+$browser->post($url, array $options = array());
+$browser->delete($url, array $options = array());
+$browser->put($url, array $options = array());
+$browser->patch($url, array $options = array());
 ```
 
 Each of these methods requires a `$url` and some optional parameters to send an
 HTTP request. Each of these method names matches the respective HTTP request
-method, for example the [`get()`](#get) method sends an HTTP `GET` request.
+method, for example, the [`get()`](#get) method sends an HTTP `GET` request.
 
 You can optionally pass an associative array of additional `$headers` that will be
 sent with this HTTP request. Additionally, each method will automatically add a
@@ -209,7 +209,7 @@ You may also want to look into the [streaming API](#streaming-response):
 
 The returned Promise is implemented in such a way that it can be cancelled
 when it is still pending.
-Cancelling a pending promise will reject its value with an Exception and
+Canceling a pending promise will reject its value with an Exception and
 clean up any underlying resources.
 
 ```php
@@ -244,7 +244,7 @@ value in seconds like this:
 $browser = $browser->withTimeout(10.0);
 
 $browser->get($url)->then(function (Psr\Http\Message\ResponseInterface $response) {
-    // response received within 10 seconds maximum
+    // response received within 10-seconds maximum
     var_dump($response->getHeaders());
 }, function (Exception $e) {
     echo 'Error: ' . $e->getMessage() . PHP_EOL;
@@ -314,9 +314,11 @@ $token = 'abc123';
 
 $promise = $browser->get(
     'https://example.com/api',
-    array(
-        'Authorization' => 'Bearer ' . $token
-    )
+    [
+        'headers' => array(
+            'Authorization' => 'Bearer ' . $token
+        )
+    ]
 );
 ```
 
@@ -475,7 +477,7 @@ more details.
 
 ### Streaming response
 
-All of the above examples assume you want to store the whole response body in memory.
+All the above examples assume you want to store the whole response body in memory.
 This is easy to get started and works reasonably well for smaller responses.
 
 However, there are several situations where it's usually a better idea to use a
