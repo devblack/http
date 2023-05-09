@@ -1,5 +1,6 @@
 <?php
 
+use Fig\Http\Message\StatusCodeInterface;
 use React\EventLoop\Loop;
 use React\Http\Message\Response;
 use React\Stream\ThroughStream;
@@ -8,7 +9,7 @@ require __DIR__ . '/../vendor/autoload.php';
 
 $http = new React\Http\HttpServer(function (Psr\Http\Message\ServerRequestInterface $request) {
     if ($request->getMethod() !== 'GET' || $request->getUri()->getPath() !== '/') {
-        return new Response(Response::STATUS_NOT_FOUND);
+        return new Response(StatusCodeInterface::STATUS_NOT_FOUND);
     }
 
     $stream = new ThroughStream();
@@ -31,7 +32,7 @@ $http = new React\Http\HttpServer(function (Psr\Http\Message\ServerRequestInterf
     });
 
     return new Response(
-        Response::STATUS_OK,
+        StatusCodeInterface::STATUS_OK,
         array(
             'Content-Type' => 'text/plain'
         ),
@@ -39,7 +40,7 @@ $http = new React\Http\HttpServer(function (Psr\Http\Message\ServerRequestInterf
     );
 });
 
-$socket = new React\Socket\SocketServer(isset($argv[1]) ? $argv[1] : '0.0.0.0:0');
+$socket = new React\Socket\SocketServer($argv[1] ?? '0.0.0.0:0');
 $http->listen($socket);
 
 echo 'Listening on ' . str_replace('tcp:', 'http:', $socket->getAddress()) . PHP_EOL;

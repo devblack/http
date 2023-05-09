@@ -21,7 +21,7 @@ class FunctionalIntegrationTest extends TestCase
     /**
      * Test timeout to use for local tests.
      *
-     * In practice this would be near 0.001s, but let's leave some time in case
+     * In practice, this would be near 0.001, but let's leave some time in case
      * the local system is currently busy.
      *
      * @var float
@@ -31,7 +31,7 @@ class FunctionalIntegrationTest extends TestCase
     /**
      * Test timeout to use for remote (internet) tests.
      *
-     * In pratice this should be below 1s, but this relies on infrastructure
+     * In practice, this should be below 1s, but this relies on infrastructure
      * outside our control, so consider this a maximum to avoid running for hours.
      *
      * @var float

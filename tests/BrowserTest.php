@@ -535,7 +535,9 @@ class BrowserTest extends TestCase
             return true;
         }))->willReturn(new Promise(function () { }));
 
-        $this->browser->get('http://example.com/', array('user-Agent' => 'ABC')); //should win
+        $this->browser->get('http://example.com/', [
+            'headers' => array('user-Agent' => 'ABC')
+        ]); //should win
     }
 
     public function testWithMultipleHeadersShouldBeMergedCorrectlyWithMultipleDefaultHeaders()
@@ -567,7 +569,9 @@ class BrowserTest extends TestCase
             'another-header' => 'value',
             'custom-header' => 'data', //should overwrite: 'Custom-header', 'custom'
         );
-        $this->browser->get('http://example.com/', $headers);
+        $this->browser->get('http://example.com/', [
+            'headers' => $headers
+        ]);
     }
 
     public function testWithoutHeaderShouldRemoveExistingHeader()

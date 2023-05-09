@@ -8,10 +8,10 @@ $http = new React\Http\HttpServer(function (Psr\Http\Message\ServerRequestInterf
     );
 });
 
-$uri = 'tls://' . (isset($argv[1]) ? $argv[1] : '0.0.0.0:0');
+$uri = 'tls://' . ($argv[1] ?? '0.0.0.0:0');
 $socket = new React\Socket\SocketServer($uri, array(
     'tls' => array(
-        'local_cert' => isset($argv[2]) ? $argv[2] : __DIR__ . '/localhost.pem'
+        'local_cert' => $argv[2] ?? __DIR__ . '/localhost.pem'
     )
 ));
 $http->listen($socket);

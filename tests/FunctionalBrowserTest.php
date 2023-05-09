@@ -469,7 +469,7 @@ class FunctionalBrowserTest extends TestCase
 
     public function testPostString()
     {
-        $response = \React\Async\await($this->browser->post($this->base . 'post', array(), 'hello world'));
+        $response = \React\Async\await($this->browser->post($this->base . 'post', array('body' => 'hello world')));
         $data = json_decode((string)$response->getBody(), true);
 
         $this->assertEquals('hello world', $data['data']);
@@ -660,7 +660,7 @@ class FunctionalBrowserTest extends TestCase
             $stream->end('hello world');
         });
 
-        $response = \React\Async\await($this->browser->post($this->base . 'post', array(), $stream));
+        $response = \React\Async\await($this->browser->post($this->base . 'post', array('body' => $stream)));
         $data = json_decode((string)$response->getBody(), true);
 
         $this->assertEquals('hello world', $data['data']);
@@ -676,7 +676,10 @@ class FunctionalBrowserTest extends TestCase
             $stream->end('hello world');
         });
 
-        $response = \React\Async\await($this->browser->post($this->base . 'post', array('Content-Length' => 11), $stream));
+        $response = \React\Async\await($this->browser->post($this->base . 'post', [
+            'headers' => array('Content-Length' => 11),
+            'body' => $stream
+        ]));
         $data = json_decode((string)$response->getBody(), true);
 
         $this->assertEquals('hello world', $data['data']);

@@ -3,6 +3,8 @@
 namespace React\Http;
 
 use Psr\Http\Message\ResponseInterface;
+use Psr\Http\Message\UriInterface;
+use React\Http\Cookie\CookieJarInterface;
 use RingCentral\Psr7\Uri;
 use React\EventLoop\Loop;
 use React\EventLoop\LoopInterface;
@@ -19,10 +21,10 @@ use InvalidArgumentException;
  */
 class Browser
 {
-    private $transaction;
-    private $baseUrl;
-    private $protocolVersion = '1.1';
-    private $defaultHeaders = array(
+    private Transaction $transaction;
+    private string|null|UriInterface $baseUrl = null;
+    private string $protocolVersion = '1.1';
+    private array $defaultHeaders = array(
         'User-Agent' => 'ReactPHP/1'
     );
 
@@ -107,12 +109,12 @@ class Browser
      * See also [GET request client example](../examples/01-client-get-request.php).
      *
      * @param string $url     URL for the request.
-     * @param array  $headers
+     * @param array  $options Additional request options, like headers a body
      * @return PromiseInterface<ResponseInterface>
      */
-    public function get($url, array $headers = array())
+    public function get(string $url, array $options = []): PromiseInterface
     {
-        return $this->requestMayBeStreaming('GET', $url, $headers);
+        return $this->requestMayBeStreaming('GET', $url, $options);
     }
 
     /**
@@ -167,13 +169,12 @@ class Browser
      * ```
      *
      * @param string                         $url      URL for the request.
-     * @param array                          $headers
-     * @param string|ReadableStreamInterface $body
+     * @param array                          $options  Additional request options, like headers a body
      * @return PromiseInterface<ResponseInterface>
      */
-    public function post($url, array $headers = array(), $body = '')
+    public function post(string $url, array $options = []): PromiseInterface
     {
-        return $this->requestMayBeStreaming('POST', $url, $headers, $body);
+        return $this->requestMayBeStreaming('POST', $url, $options);
     }
 
     /**
@@ -188,12 +189,12 @@ class Browser
      * ```
      *
      * @param string $url     URL for the request.
-     * @param array  $headers
+     * @param array  $options Additional request options, like headers a body
      * @return PromiseInterface<ResponseInterface>
      */
-    public function head($url, array $headers = array())
+    public function head(string $url, array $options = []): PromiseInterface
     {
-        return $this->requestMayBeStreaming('HEAD', $url, $headers);
+        return $this->requestMayBeStreaming('HEAD', $url, $options);
     }
 
     /**
@@ -229,13 +230,12 @@ class Browser
      * ```
      *
      * @param string                         $url      URL for the request.
-     * @param array                          $headers
-     * @param string|ReadableStreamInterface $body
+     * @param array                          $options  Additional request options, like headers a body
      * @return PromiseInterface<ResponseInterface>
      */
-    public function patch($url, array $headers = array(), $body = '')
+    public function patch(string $url, array $options = []): PromiseInterface
     {
-        return $this->requestMayBeStreaming('PATCH', $url , $headers, $body);
+        return $this->requestMayBeStreaming('PATCH', $url, $options);
     }
 
     /**
@@ -273,13 +273,12 @@ class Browser
      * ```
      *
      * @param string                         $url      URL for the request.
-     * @param array                          $headers
-     * @param string|ReadableStreamInterface $body
+     * @param array                          $options  Additional request options, like headers a body
      * @return PromiseInterface<ResponseInterface>
      */
-    public function put($url, array $headers = array(), $body = '')
+    public function put(string $url, array $options = []): PromiseInterface
     {
-        return $this->requestMayBeStreaming('PUT', $url, $headers, $body);
+        return $this->requestMayBeStreaming('PUT', $url, $options);
     }
 
     /**
@@ -294,13 +293,12 @@ class Browser
      * ```
      *
      * @param string                         $url      URL for the request.
-     * @param array                          $headers
-     * @param string|ReadableStreamInterface $body
+     * @param array                          $options  Additional request options, like headers a body
      * @return PromiseInterface<ResponseInterface>
      */
-    public function delete($url, array $headers = array(), $body = '')
+    public function delete(string $url, array $options = []): PromiseInterface
     {
-        return $this->requestMayBeStreaming('DELETE', $url, $headers, $body);
+        return $this->requestMayBeStreaming('DELETE', $url, $options);
     }
 
     /**
@@ -342,13 +340,12 @@ class Browser
      *
      * @param string                         $method   HTTP request method, e.g. GET/HEAD/POST etc.
      * @param string                         $url      URL for the request
-     * @param array                          $headers  Additional request headers
-     * @param string|ReadableStreamInterface $body     HTTP request body contents
+     * @param array                          $options  Additional request options, like headers a body
      * @return PromiseInterface<ResponseInterface>
      */
-    public function request($method, $url, array $headers = array(), $body = '')
+    public function request(string $method, string $url, array $options = []): PromiseInterface
     {
-        return $this->withOptions(array('streaming' => false))->requestMayBeStreaming($method, $url, $headers, $body);
+        return $this->withOptions(array('streaming' => false))->requestMayBeStreaming($method, $url, $options);
     }
 
     /**
@@ -415,13 +412,12 @@ class Browser
      *
      * @param string                         $method   HTTP request method, e.g. GET/HEAD/POST etc.
      * @param string                         $url      URL for the request
-     * @param array                          $headers  Additional request headers
-     * @param string|ReadableStreamInterface $body     HTTP request body contents
+     * @param array                          $options  Additional request options, like headers a body
      * @return PromiseInterface<ResponseInterface>
      */
-    public function requestStreaming($method, $url, $headers = array(), $body = '')
+    public function requestStreaming(string $method, string $url, array $options = []): PromiseInterface
     {
-        return $this->withOptions(array('streaming' => true))->requestMayBeStreaming($method, $url, $headers, $body);
+        return $this->withOptions(array('streaming' => true))->requestMayBeStreaming($method, $url, $options);
     }
 
     /**
@@ -441,7 +437,7 @@ class Browser
      * ```
      *
      * You can pass in a bool `true` to re-enable default timeout handling. This
-     * will respects PHP's `default_socket_timeout` setting (default 60s):
+     * will respect PHP's `default_socket_timeout` setting (default 60s):
      *
      * ```php
      * $browser = $browser->withTimeout(true);
@@ -453,10 +449,10 @@ class Browser
      * method actually returns a *new* [`Browser`](#browser) instance with the
      * given timeout value applied.
      *
-     * @param bool|number $timeout
+     * @param bool|int|float $timeout
      * @return self
      */
-    public function withTimeout($timeout)
+    public function withTimeout(bool|int|float $timeout)
     {
         if ($timeout === true) {
             $timeout = null;
@@ -526,11 +522,22 @@ class Browser
      * @param bool|int $followRedirects
      * @return self
      */
-    public function withFollowRedirects($followRedirects)
+    public function withFollowRedirects(bool|int $followRedirects)
     {
         return $this->withOptions(array(
             'followRedirects' => $followRedirects !== false,
             'maxRedirects' => \is_bool($followRedirects) ? null : $followRedirects
+        ));
+    }
+
+    /**
+     * @param bool|CookieJarInterface $cookies
+     * @return self
+     */
+    public function withCookies(bool|CookieJarInterface $cookies): Browser
+    {
+        return $this->withOptions(array(
+            'cookies' => $cookies
         ));
     }
 
@@ -580,7 +587,7 @@ class Browser
      * @param bool $obeySuccessCode
      * @return self
      */
-    public function withRejectErrorResponse($obeySuccessCode)
+    public function withRejectErrorResponse(bool $obeySuccessCode)
     {
         return $this->withOptions(array(
             'obeySuccessCode' => $obeySuccessCode,
@@ -625,7 +632,7 @@ class Browser
      * @throws InvalidArgumentException if the given $baseUrl is not a valid absolute URL
      * @see self::withoutBase()
      */
-    public function withBase($baseUrl)
+    public function withBase(?string $baseUrl)
     {
         $browser = clone $this;
         if ($baseUrl === null) {
@@ -667,7 +674,7 @@ class Browser
      * @return self
      * @throws InvalidArgumentException
      */
-    public function withProtocolVersion($protocolVersion)
+    public function withProtocolVersion(string $protocolVersion)
     {
         if (!\in_array($protocolVersion, array('1.0', '1.1'), true)) {
             throw new InvalidArgumentException('Invalid HTTP protocol version, must be one of "1.1" or "1.0"');
@@ -720,7 +727,7 @@ class Browser
      * @return self
      * @see self::requestStreaming()
      */
-    public function withResponseBuffer($maximumSize)
+    public function withResponseBuffer(int $maximumSize): Browser
     {
         return $this->withOptions(array(
             'maximumSize' => $maximumSize
@@ -744,7 +751,7 @@ class Browser
      * @param string $value
      * @return Browser
      */
-    public function withHeader($header, $value)
+    public function withHeader(string $header, string $value)
     {
         $browser = $this->withoutHeader($header);
         $browser->defaultHeaders[$header] = $value;
@@ -766,9 +773,9 @@ class Browser
      * method `withHeader(string $header, string $value): Browser`
      *
      * @param string $header
-     * @return Browser
+     * @return self
      */
-    public function withoutHeader($header)
+    public function withoutHeader(string $header)
     {
         $browser = clone $this;
 
@@ -805,7 +812,7 @@ class Browser
      * See also [timeouts](#timeouts), [redirects](#redirects) and
      * [streaming](#streaming) for more details.
      *
-     * Notice that the [`Browser`](#browser) is an immutable object, i.e. this
+     * Notice that the [`Browser`](#browser) is an immutable object, i.e., this
      * method actually returns a *new* [`Browser`](#browser) instance with the
      * options applied.
      *
@@ -826,15 +833,29 @@ class Browser
     /**
      * @param string                         $method
      * @param string                         $url
-     * @param array                          $headers
-     * @param string|ReadableStreamInterface $body
+     * @param array                          $options
      * @return PromiseInterface<ResponseInterface>
      */
-    private function requestMayBeStreaming($method, $url, array $headers = array(), $body = '')
+    private function requestMayBeStreaming(string $method, string $url, array $options = []): PromiseInterface
     {
         if ($this->baseUrl !== null) {
             // ensure we're actually below the base URL
             $url = Uri::resolve($this->baseUrl, $url);
+        }
+
+        $headers = [];
+        if (isset($options['headers'])) {
+            $headers = $options['headers'];
+            unset($options['headers']);
+        }
+
+        $body = '';
+        if (isset($options['body'])) {
+            /**
+             * @var string|ReadableStreamInterface $body
+             */
+            $body = $options['body'];
+            unset($options['body']);
         }
 
         foreach ($this->defaultHeaders as $key => $value) {
@@ -851,7 +872,8 @@ class Browser
         }
 
         return $this->transaction->send(
-            new Request($method, $url, $headers, $body, $this->protocolVersion)
+            new Request($method, $url, $headers, $body, $this->protocolVersion),
+            $options
         );
     }
 }

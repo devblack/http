@@ -8,7 +8,7 @@
 // b1) first run example HTTP server:
 // $ php examples/99-server-benchmark-download.php 8080
 //
-// b2) run HTTP client receiving a 10 GB download:
+// b2 run an HTTP client receiving a 10 GB download:
 // $ php examples/91-client-benchmark-download.php http://localhost:8080/10g.bin
 
 use Psr\Http\Message\ResponseInterface;
@@ -16,7 +16,7 @@ use React\EventLoop\Loop;
 use React\Http\Browser;
 use React\Stream\ReadableStreamInterface;
 
-$url = isset($argv[1]) ? $argv[1] : 'http://google.com/';
+$url = $argv[1] ?? 'https://google.com/';
 
 require __DIR__ . '/../vendor/autoload.php';
 
@@ -35,7 +35,7 @@ $client->requestStreaming('GET', $url)->then(function (ResponseInterface $respon
     $stream = $response->getBody();
     assert($stream instanceof ReadableStreamInterface);
 
-    // count number of bytes received
+    // count the number of bytes received
     $bytes = 0;
     $stream->on('data', function ($chunk) use (&$bytes) {
         $bytes += strlen($chunk);

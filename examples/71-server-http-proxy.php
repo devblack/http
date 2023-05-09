@@ -3,6 +3,8 @@
 // $ php examples/71-server-http-proxy.php 8080
 // $ curl -v --proxy http://localhost:8080 http://reactphp.org/
 
+use Fig\Http\Message\StatusCodeInterface;
+
 require __DIR__ . '/../vendor/autoload.php';
 
 // Note how this example uses the `HttpServer` without the `StreamingRequestMiddleware`.
@@ -10,10 +12,10 @@ require __DIR__ . '/../vendor/autoload.php';
 // As such, this is store-and-forward proxy. This could also use the advanced
 // `StreamingRequestMiddleware` to forward the incoming request as it comes in.
 $http = new React\Http\HttpServer(function (Psr\Http\Message\ServerRequestInterface $request) {
-    if (strpos($request->getRequestTarget(), '://') === false) {
+    if (!str_contains($request->getRequestTarget(), '://')) {
         return React\Http\Message\Response::plaintext(
             "This is a plain HTTP proxy\n"
-        )->withStatus(React\Http\Message\Response::STATUS_BAD_REQUEST);
+        )->withStatus(StatusCodeInterface::STATUS_BAD_REQUEST);
     }
 
     // prepare outgoing client request by updating request-target and Host header
@@ -24,7 +26,7 @@ $http = new React\Http\HttpServer(function (Psr\Http\Message\ServerRequestInterf
     }
     $outgoing = $request->withRequestTarget($target)->withHeader('Host', $host);
 
-    // pseudo code only: simply dump the outgoing request as a string
+    // pseudocode only: simply dump the outgoing request as a string
     // left up as an exercise: use an HTTP client to send the outgoing request
     // and forward the incoming response to the original client request
     return React\Http\Message\Response::plaintext(
@@ -32,7 +34,7 @@ $http = new React\Http\HttpServer(function (Psr\Http\Message\ServerRequestInterf
     );
 });
 
-$socket = new React\Socket\SocketServer(isset($argv[1]) ? $argv[1] : '0.0.0.0:0');
+$socket = new React\Socket\SocketServer($argv[1] ?? '0.0.0.0:0');
 $http->listen($socket);
 
 echo 'Listening on ' . str_replace('tcp:', 'http:', $socket->getAddress()) . PHP_EOL;

@@ -14,12 +14,14 @@ $child->name = 'Christian Lück';
 
 $client->put(
     'https://httpbin.org/put',
-    array(
-        'Content-Type' => 'text/xml'
-    ),
-    $xml->asXML()
+    [
+        'headers' => array(
+            'Content-Type' => 'text/xml'
+        ),
+        'body' => $xml->asXML()
+    ]
 )->then(function (ResponseInterface $response) {
-    echo (string)$response->getBody();
+    echo $response->getBody();
 }, function (Exception $e) {
     echo 'Error: ' . $e->getMessage() . PHP_EOL;
 });

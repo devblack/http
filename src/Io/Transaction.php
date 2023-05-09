@@ -2,11 +2,13 @@
 
 namespace React\Http\Io;
 
+use Fig\Http\Message\StatusCodeInterface;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\UriInterface;
 use React\EventLoop\LoopInterface;
-use React\Http\Message\Response;
+use React\Http\Cookie\CookieJar;
+use React\Http\Cookie\CookieJarInterface;
 use React\Http\Message\ResponseException;
 use React\Promise\Deferred;
 use React\Promise\Promise;
@@ -19,24 +21,36 @@ use RingCentral\Psr7\Uri;
  */
 class Transaction
 {
-    private $sender;
-    private $loop;
+    /**
+     * @var Sender $sender
+     */
+    private Sender $sender;
+
+    /**
+     * @var LoopInterface $loop
+     */
+    private LoopInterface $loop;
 
     // context: http.timeout (ini_get('default_socket_timeout'): 60)
-    private $timeout;
+    private int|float|null $timeout = null;
 
     // context: http.follow_location (true)
-    private $followRedirects = true;
+    private bool $followRedirects = true;
 
     // context: http.max_redirects (10)
-    private $maxRedirects = 10;
+    private int $maxRedirects = 10;
 
     // context: http.ignore_errors (false)
-    private $obeySuccessCode = true;
+    private bool $obeySuccessCode = true;
 
-    private $streaming = false;
+    /**
+     * @var bool|CookieJarInterface
+     */
+    private CookieJarInterface|bool $cookies = false;
 
-    private $maximumSize = 16777216; // 16 MiB = 2^24 bytes
+    private bool $streaming = false;
+
+    private int $maximumSize = 16777216; // 16 MiB = 2^24 bytes
 
     public function __construct(Sender $sender, LoopInterface $loop)
     {
@@ -48,7 +62,7 @@ class Transaction
      * @param array $options
      * @return self returns new instance, without modifying existing instance
      */
-    public function withOptions(array $options)
+    public function withOptions(array $options): Transaction|static
     {
         $transaction = clone $this;
         foreach ($options as $name => $value) {
@@ -66,7 +80,7 @@ class Transaction
         return $transaction;
     }
 
-    public function send(RequestInterface $request)
+    public function send(RequestInterface $request, ?array $options = []): Promise
     {
         $state = new ClientRequestState();
         $deferred = new Deferred(function () use ($state) {
@@ -80,7 +94,15 @@ class Transaction
         $timeout = (float)($this->timeout !== null ? $this->timeout : ini_get("default_socket_timeout"));
 
         $loop = $this->loop;
-        $this->next($request, $deferred, $state)->then(
+
+        if (isset($options['cookies']) && $options['cookies'] instanceof CookieJarInterface) {
+            $this->cookies = $options['cookies'];
+            unset($options['cookies']);
+        } elseif ($this->cookies && !($this->cookies instanceof CookieJarInterface)) {
+            $this->cookies = new CookieJar();
+        }
+
+        $this->next($request, $options, $deferred, $state)->then(
             function (ResponseInterface $response) use ($state, $deferred, $loop, &$timeout) {
                 if ($state->timeout !== null) {
                     $loop->cancelTimer($state->timeout);
@@ -119,11 +141,12 @@ class Transaction
     }
 
     /**
-     * @internal
-     * @param number $timeout
+     * @param Deferred $deferred
+     * @param ClientRequestState $state
+     * @param $timeout
      * @return void
      */
-    public function applyTimeout(Deferred $deferred, ClientRequestState $state, $timeout)
+    public function applyTimeout(Deferred $deferred, ClientRequestState $state, $timeout): void
     {
         $state->timeout = $this->loop->addTimer($timeout, function () use ($timeout, $deferred, $state) {
             $deferred->reject(new \RuntimeException(
@@ -136,9 +159,11 @@ class Transaction
         });
     }
 
-    private function next(RequestInterface $request, Deferred $deferred, ClientRequestState $state)
+    private function next(RequestInterface $request, array $options, Deferred $deferred, ClientRequestState $state): PromiseInterface
     {
-        $this->progress('request', array($request));
+        if ($this->cookies instanceof CookieJarInterface) {
+            $request = $this->cookies->withCookieHeader($request);
+        }
 
         $that = $this;
         ++$state->numRequests;
@@ -146,26 +171,32 @@ class Transaction
         $promise = $this->sender->send($request);
 
         if (!$this->streaming) {
-            $promise = $promise->then(function ($response) use ($deferred, $state, $that) {
-                return $that->bufferResponse($response, $deferred, $state);
+            $promise = $promise->then(function ($response) use ($request, $state, $that) {
+                return $that->bufferResponse($response, $request, $state);
             });
         }
 
         $state->pending = $promise;
 
         return $promise->then(
-            function (ResponseInterface $response) use ($request, $that, $deferred, $state) {
-                return $that->onResponse($response, $request, $deferred, $state);
+            function (ResponseInterface $response) use ($request, $that, $options, $deferred, $state) {
+                return $that->onResponse($response, $request, $options, $deferred, $state);
             }
         );
     }
 
     /**
-     * @internal
-     * @return PromiseInterface Promise<ResponseInterface, Exception>
+     * @param ResponseInterface $response
+     * @param RequestInterface $request
+     * @param ClientRequestState $state
+     * @return Promise|PromiseInterface
      */
-    public function bufferResponse(ResponseInterface $response, Deferred $deferred, ClientRequestState $state)
+    public function bufferResponse(ResponseInterface $response, RequestInterface $request, ClientRequestState $state): PromiseInterface|Promise
     {
+        if ($this->cookies instanceof CookieJarInterface) {
+            $this->cookies->extractCookies($request, $response);
+        }
+
         $body = $response->getBody();
         $size = $body->getSize();
 
@@ -189,15 +220,18 @@ class Transaction
         return $state->pending = new Promise(function ($resolve, $reject) use ($body, $maximumSize, $response, &$closer) {
             // resolve with current buffer when stream closes successfully
             $buffer = '';
-            $body->on('close', $closer = function () use (&$buffer, $response, $maximumSize, $resolve, $reject) {
-                $resolve($response->withBody(new BufferedBody($buffer)));
-            });
+            $body->on(
+                'close',
+                $closer = function () use (&$buffer, $response, $resolve) {
+                    $resolve($response->withBody(new BufferedBody($buffer)));
+                }
+            );
 
             // buffer response body data in memory
             $body->on('data', function ($data) use (&$buffer, $maximumSize, $body, $closer, $reject) {
                 $buffer .= $data;
 
-                // close stream and reject promise if limit is exceeded
+                // close stream and reject promise if the limit is exceeded
                 if (isset($buffer[$maximumSize])) {
                     $buffer = '';
                     assert($closer instanceof \Closure);
@@ -220,7 +254,7 @@ class Transaction
                 ));
             });
         }, function () use ($body, &$closer) {
-            // cancelled buffering: remove close handler to avoid resolving, then close and reject
+            // canceled buffering: remove close handler to avoid resolving, then close and rejecting
             assert($closer instanceof \Closure);
             $body->removeListener('close', $closer);
             $body->close();
@@ -230,18 +264,26 @@ class Transaction
     }
 
     /**
-     * @internal
-     * @throws ResponseException
-     * @return ResponseInterface|PromiseInterface
+     * @param ResponseInterface $response
+     * @param RequestInterface $request
+     * @param array $options
+     * @param Deferred $deferred
+     * @param ClientRequestState $state
+     * @return PromiseInterface|ResponseInterface
      */
-    public function onResponse(ResponseInterface $response, RequestInterface $request, Deferred $deferred, ClientRequestState $state)
+    public function onResponse(ResponseInterface $response, RequestInterface $request, array $options, Deferred $deferred, ClientRequestState $state): PromiseInterface|ResponseInterface
     {
-        $this->progress('response', array($response, $request));
-
+        // Here we can implement cookie session support (just for in memory, in file require promise file-loader)
+        if ($this->cookies instanceof CookieJarInterface) {
+            $this->cookies->extractCookies($request, $response);
+        }
         // follow 3xx (Redirection) response status codes if Location header is present and not explicitly disabled
         // @link https://tools.ietf.org/html/rfc7231#section-6.4
-        if ($this->followRedirects && ($response->getStatusCode() >= 300 && $response->getStatusCode() < 400) && $response->hasHeader('Location')) {
-            return $this->onResponseRedirect($response, $request, $deferred, $state);
+
+        if (isset($options['followRedirects']) && !$options['followRedirects']) {
+            // no redirect -
+        } elseif ($this->followRedirects && ($response->getStatusCode() >= 300 && $response->getStatusCode() < 400) && $response->hasHeader('Location')) {
+            return $this->onResponseRedirect($response, $request, $options, $deferred, $state);
         }
 
         // only status codes 200-399 are considered to be valid, reject otherwise
@@ -256,24 +298,26 @@ class Transaction
     /**
      * @param ResponseInterface $response
      * @param RequestInterface $request
+     * @param array $options
      * @param Deferred $deferred
      * @param ClientRequestState $state
      * @return PromiseInterface
-     * @throws \RuntimeException
      */
-    private function onResponseRedirect(ResponseInterface $response, RequestInterface $request, Deferred $deferred, ClientRequestState $state)
+    private function onResponseRedirect(ResponseInterface $response, RequestInterface $request, array $options, Deferred $deferred, ClientRequestState $state): PromiseInterface
     {
+        // Optional:
+        // Track redirect counts to headers as ['http-redirect-counts']
+        // inject last redirect object to response (I think is not necessary)
         // resolve location relative to last request URI
         $location = Uri::resolve($request->getUri(), $response->getHeaderLine('Location'));
 
         $request = $this->makeRedirectRequest($request, $location, $response->getStatusCode());
-        $this->progress('redirect', array($request));
 
         if ($state->numRequests >= $this->maxRedirects) {
             throw new \RuntimeException('Maximum number of redirects (' . $this->maxRedirects . ') exceeded');
         }
 
-        return $this->next($request, $deferred, $state);
+        return $this->next($request, $options, $deferred, $state);
     }
 
     /**
@@ -283,7 +327,7 @@ class Transaction
      * @return RequestInterface
      * @throws \RuntimeException
      */
-    private function makeRedirectRequest(RequestInterface $request, UriInterface $location, $statusCode)
+    private function makeRedirectRequest(RequestInterface $request, UriInterface $location, int $statusCode): RequestInterface
     {
         // Remove authorization if changing hostnames (but not if just changing ports or protocols).
         $originalHost = $request->getUri()->getHost();
@@ -293,7 +337,7 @@ class Transaction
 
         $request = $request->withoutHeader('Host')->withUri($location);
 
-        if ($statusCode === Response::STATUS_TEMPORARY_REDIRECT || $statusCode === Response::STATUS_PERMANENT_REDIRECT) {
+        if ($statusCode === StatusCodeInterface::STATUS_TEMPORARY_REDIRECT || $statusCode === StatusCodeInterface::STATUS_PERMANENT_REDIRECT) {
             if ($request->getBody() instanceof ReadableStreamInterface) {
                 throw new \RuntimeException('Unable to redirect request with streaming body');
             }
@@ -306,25 +350,5 @@ class Transaction
         }
 
         return $request;
-    }
-
-    private function progress($name, array $args = array())
-    {
-        return;
-
-        echo $name;
-
-        foreach ($args as $arg) {
-            echo ' ';
-            if ($arg instanceof ResponseInterface) {
-                echo 'HTTP/' . $arg->getProtocolVersion() . ' ' . $arg->getStatusCode() . ' ' . $arg->getReasonPhrase();
-            } elseif ($arg instanceof RequestInterface) {
-                echo $arg->getMethod() . ' ' . $arg->getRequestTarget() . ' HTTP/' . $arg->getProtocolVersion();
-            } else {
-                echo $arg;
-            }
-        }
-
-        echo PHP_EOL;
     }
 }

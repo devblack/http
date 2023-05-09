@@ -19,6 +19,7 @@ $ telnet localhost 1080
 Hint: try this with multiple connections :)
 */
 
+use Fig\Http\Message\StatusCodeInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use React\EventLoop\Loop;
 use React\Http\Message\Response;
@@ -33,12 +34,12 @@ require __DIR__ . '/../vendor/autoload.php';
 $chat = new ThroughStream();
 
 // Note how this example uses the `HttpServer` without the `StreamingRequestMiddleware`.
-// The initial incoming request does not contain a body and we upgrade to a
+// The initial incoming request does not contain a body, and we upgrade to a
 // stream object below.
 $http = new React\Http\HttpServer(function (ServerRequestInterface $request) use ($chat) {
     if ($request->getHeaderLine('Upgrade') !== 'chat' || $request->getProtocolVersion() === '1.0') {
         return new Response(
-            Response::STATUS_UPGRADE_REQUIRED,
+            StatusCodeInterface::STATUS_UPGRADE_REQUIRED,
             array(
                 'Upgrade' => 'chat'
             ),
@@ -70,13 +71,13 @@ $http = new React\Http\HttpServer(function (ServerRequestInterface $request) use
         $chat->write($username . ' joined' . PHP_EOL);
     });
 
-    // send goodbye to channel once connection closes
+    // send goodbye to channel once the connection closes
     $stream->on('close', function () use ($username, $chat) {
         $chat->write($username . ' left' . PHP_EOL);
     });
 
     return new Response(
-        Response::STATUS_SWITCHING_PROTOCOLS,
+        StatusCodeInterface::STATUS_SWITCHING_PROTOCOLS,
         array(
             'Upgrade' => 'chat'
         ),
@@ -84,7 +85,7 @@ $http = new React\Http\HttpServer(function (ServerRequestInterface $request) use
     );
 });
 
-$socket = new React\Socket\SocketServer(isset($argv[1]) ? $argv[1] : '0.0.0.0:0');
+$socket = new React\Socket\SocketServer($argv[1] ?? '0.0.0.0:0');
 $http->listen($socket);
 
 echo 'Listening on ' . str_replace('tcp:', 'http:', $socket->getAddress()) . PHP_EOL;

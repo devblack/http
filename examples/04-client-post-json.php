@@ -17,12 +17,14 @@ $data = array(
 
 $client->post(
     'https://httpbin.org/post',
-    array(
-        'Content-Type' => 'application/json'
-    ),
-    json_encode($data)
+    [
+        'headers' => array(
+            'Content-Type' => 'application/json'
+        ),
+        'body' => json_encode($data)
+    ]
 )->then(function (ResponseInterface $response) {
-    echo (string)$response->getBody();
+    echo $response->getBody();
 }, function (Exception $e) {
     echo 'Error: ' . $e->getMessage() . PHP_EOL;
 });

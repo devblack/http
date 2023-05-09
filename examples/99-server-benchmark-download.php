@@ -15,6 +15,7 @@
 // $ docker run -it --rm --net=host skandyla/wrk -t8 -c10 -d20 http://localhost:8080/
 
 use Evenement\EventEmitter;
+use Fig\Http\Message\StatusCodeInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use React\Http\Message\Response;
 use React\Stream\ReadableStreamInterface;
@@ -48,7 +49,7 @@ class ChunkRepeater extends EventEmitter implements ReadableStreamInterface
             return;
         }
 
-        // keep emitting until stream is paused
+        // keep emitting until the stream is paused
         $this->paused = false;
         while ($this->position < $this->count && !$this->paused) {
             ++$this->position;
@@ -109,7 +110,7 @@ $http = new React\Http\HttpServer(function (ServerRequestInterface $request) {
     React\EventLoop\Loop::addTimer(0, array($stream, 'resume'));
 
     return new Response(
-        Response::STATUS_OK,
+        StatusCodeInterface::STATUS_OK,
         array(
             'Content-Type' => 'application/octet-data',
             'Content-Length' => $stream->getSize()
@@ -118,7 +119,7 @@ $http = new React\Http\HttpServer(function (ServerRequestInterface $request) {
     );
 });
 
-$socket = new React\Socket\SocketServer(isset($argv[1]) ? $argv[1] : '0.0.0.0:0');
+$socket = new React\Socket\SocketServer($argv[1] ?? '0.0.0.0:0');
 $http->listen($socket);
 
 echo 'Listening on ' . str_replace('tcp:', 'http:', $socket->getAddress()) . PHP_EOL;

@@ -51,7 +51,7 @@ class ChunkRepeater extends EventEmitter implements ReadableStreamInterface
             return;
         }
 
-        // keep emitting until stream is paused
+        // keep emitting until the stream is paused
         $this->paused = false;
         while ($this->position < $this->count && !$this->paused) {
             ++$this->position;
@@ -95,8 +95,8 @@ class ChunkRepeater extends EventEmitter implements ReadableStreamInterface
 
 $client = new Browser();
 
-$url = isset($argv[1]) ? $argv[1] : 'http://httpbin.org/post';
-$n = isset($argv[2]) ? $argv[2] : 10;
+$url = $argv[1] ?? 'https://httpbin.org/post';
+$n = $argv[2] ?? 10;
 $source = new ChunkRepeater(str_repeat('x', 1000000), $n);
 Loop::futureTick(function () use ($source) {
     $source->resume();
